@@ -5,12 +5,12 @@ Checker engine taken from the WORKING hi2 bot (real availability checks).
 Run locally:  python bot.py
 Render: Background Worker, start command `python bot.py`
 
-Required env var : BOT_TOKEN   (falls back to the working token if unset)
-Optional env vars: OWNER_USER_ID, OWNER_USERNAME, SUPPORT_CHAT, DB_FILE
-
-Public commands: /start /help /single /bulk
-Admin commands stay hidden from the public list.
+Required env var : BOT_TOKEN
+Optional env vars: OWNER_USER_ID, OWNER_USERNAME, SUPPORT_CHAT, CHANNEL, DB_FILE
 """
+
+from flask import Flask
+from threading import Thread
 import asyncio
 import html
 import json
@@ -34,14 +34,34 @@ from telegram.ext import (
 )
 from telegram.request import HTTPXRequest
 
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "OBITO NEXUS · scan core online", 200
+
+@app.route("/health")
+def health():
+    return "OK", 200
+
+def run():
+    app.run(host="0.0.0.0", port=10000)
+
+def keep_alive():
+    Thread(target=run, daemon=True).start()
+
+keep_alive()
+
 # ──────────────────────────────────────────────────────────────
-# CONFIG (YOUR TOKEN & ID UPDATED HERE)
+# CONFIG
 # ──────────────────────────────────────────────────────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8404717126:AAF6untl8TV-DyEM-2FgnjLfeaYUAliiZX0").strip()
 
-OWNER_USER_ID = int(os.getenv("OWNER_USER_ID", "8635902333"))   # your Telegram user ID
-OWNER_USERNAME = os.getenv("OWNER_USERNAME", "f4did").lstrip("@")
-SUPPORT_CHAT = os.getenv("SUPPORT_CHAT", "r3alhero").lstrip("@")
+OWNER_USER_ID = int(os.getenv("OWNER_USER_ID", "8635902333"))
+OWNER_USERNAME = os.getenv("OWNER_USERNAME", "mva_kallo").lstrip("@")
+SUPPORT_CHAT = os.getenv("SUPPORT_CHAT", "mva_kallo").lstrip("@")
+CHANNEL = os.getenv("CHANNEL", "kallo404").lstrip("@")
 BOT_NAME = "OBITO"
 
 NEW_USER_CREDITS = 20
@@ -51,9 +71,9 @@ REFERRER_BONUS = 10
 REFERRED_BONUS = 5
 DB_FILE = Path(os.getenv("DB_FILE", "data/obito_db.json"))
 
-HISTORY_CAP = 800      # kept check records
-LOG_CAP = 400          # kept redeem / premium records
-LIST_PAGE = 25         # rows per panel listing
+HISTORY_CAP = 800
+LOG_CAP = 400
+LIST_PAGE = 25
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -61,14 +81,15 @@ logging.basicConfig(
 )
 log = logging.getLogger("obito")
 
-# ── BRAND / SIGNATURE (so nobody claims it) ───────────────────
-BRAND = "𝐎𝐁𝐈𝐓𝐎 𝐍𝐄𝐗𝐔𝐒"
-SIGN = "ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴏʙɪᴛᴏ ꜰʀᴀᴍᴇᴡᴏʀᴋ 𖣂"
-MARK_STAMP = f"⟡ {BRAND} · 𝐒𝐂𝐀𝐍 𝐂𝐎𝐑𝐄 ⟡"
+# ── BRAND ─────────────────────────────────────────────────────
+BRAND      = "ᴏʙɪᴛᴏ ɴᴇxᴜꜱ"
+SIGN       = "ᴀꜱɪᴀᴛɪᴄ · ꜱᴄᴀɴ ᴄᴏʀᴇ"
+MARK_STAMP = f"❖ {BRAND} ❖"
+DIV        = "─────────────────"
 
 
 # ──────────────────────────────────────────────────────────────
-# REAL AVAILABILITY CHECK ENGINE  (from the working hi2 bot)
+# REAL AVAILABILITY CHECK ENGINE
 # ──────────────────────────────────────────────────────────────
 SUPPORTED_DOMAINS = ["hi2.in", "telegmail.com"]
 RECAPTCHA_SITEKEY = "6LfEUPkgAAAAAKTgbMoewQkWBEQhO2VPL4QviKct"
@@ -97,26 +118,24 @@ DEFAULT_COOKIES = {
 
 # ── ANIMATION BANKS ───────────────────────────────────────────
 SPINNER = ["◜", "◠", "◝", "◞", "◡", "◟"]
-ORBIT = ["◜", "◝", "◞", "◟"]
 GLITCH = ["◈", "◇", "◆", "◇"]
 SCAN_PHASES = [
-    "ʙᴏᴏᴛɪɴɢ ꜱᴄᴀɴ ᴄᴏʀᴇ",
-    "ʀᴇꜱᴏʟᴠɪɴɢ ᴛᴀʀɢᴇᴛ ɴᴏᴅᴇ",
+    "ʙᴏᴏᴛɪɴɢ ᴄᴏʀᴇ",
+    "ʀᴇꜱᴏʟᴠɪɴɢ ᴛᴀʀɢᴇᴛ",
     "ꜱᴏʟᴠɪɴɢ ʜᴀɴᴅꜱʜᴀᴋᴇ",
     "Qᴜᴇʀʏɪɴɢ ʀᴇɢɪꜱᴛʀʏ",
-    "ᴄʀᴏꜱꜱ-ᴄʜᴇᴄᴋɪɴɢ ʀᴇᴄᴏʀᴅꜱ",
+    "ᴄʀᴏꜱꜱ-ᴄʜᴇᴄᴋɪɴɢ",
     "ꜰɪɴᴀʟɪꜱɪɴɢ ᴠᴇʀᴅɪᴄᴛ",
 ]
 VERDICT = {
-    "taken":     ("🔴", "𝐓 𝐀 𝐊 𝐄 𝐍",   "ʀᴇɢɪꜱᴛᴇʀᴇᴅ · ᴀʟʀᴇᴀᴅʏ ɪɴ ᴜꜱᴇ"),
-    "not_taken": ("🟢", "𝐅 𝐑 𝐄 𝐄",     "ᴜɴʀᴇɢɪꜱᴛᴇʀᴇᴅ · ᴏᴘᴇɴ ᴛᴏ ᴄʟᴀɪᴍ"),
-    "unknown":   ("🟡", "𝐔 𝐍 𝐊 𝐍 𝐎 𝐖 𝐍", "ʀᴇɢɪꜱᴛʀʏ ꜱɪʟᴇɴᴛ · ʀᴇᴛʀʏ ᴀᴅᴠɪꜱᴇᴅ"),
+    "taken":     ("◉", "ᴛᴀᴋᴇɴ",    "ʀᴇɢɪꜱᴛᴇʀᴇᴅ · ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ"),
+    "not_taken": ("○", "ꜰʀᴇᴇ",     "ᴜɴʀᴇɢɪꜱᴛᴇʀᴇᴅ · ᴀᴠᴀɪʟᴀʙʟᴇ"),
+    "unknown":   ("◎", "ᴜɴᴋɴᴏᴡɴ", "ꜱɪʟᴇɴᴛ · ʀᴇᴛʀʏ ᴀᴅᴠɪꜱᴇᴅ"),
 }
-MARK = {"taken": "🔴", "not_taken": "🟢", "unknown": "🟡"}
+MARK = {"taken": "◉", "not_taken": "○", "unknown": "◎"}
 
 
 def _marquee(i, width=11):
-    """Ping-pong radar dot inside a track."""
     span = 2 * (width - 1)
     pos = i % span
     if pos >= width:
@@ -127,7 +146,7 @@ def _marquee(i, width=11):
 def _bar(done, total, width=14):
     filled = int(width * done / total) if total else 0
     filled = max(0, min(width, filled))
-    return "█" * filled + "░" * (width - filled)
+    return "▰" * filled + "▱" * (width - filled)
 
 
 def scan_id():
@@ -135,11 +154,11 @@ def scan_id():
 
 
 def stamp():
-    return datetime.now(timezone.utc).strftime("%d %b · %H:%M UTC")
+    return datetime.now(timezone.utc).strftime("%d.%m · %H:%M UTC")
 
 
 def short_ts():
-    return datetime.now(timezone.utc).strftime("%d %b %H:%M")
+    return datetime.now(timezone.utc).strftime("%d.%m %H:%M")
 
 
 def build_session(seed_cookies=True):
@@ -199,7 +218,6 @@ def solve_recaptcha_hi2(session):
 
 
 def check_hi2_email(email):
-    """Returns 'taken' | 'not_taken' | 'unknown'."""
     if "@" not in email:
         return "unknown"
     prefix, domain = email.split("@", 1)
@@ -253,7 +271,6 @@ def check_hi2_email(email):
 # ANIMATED SCAN ROUTINES
 # ──────────────────────────────────────────────────────────────
 async def _tick(fut, seconds=1.05):
-    """Sleep in small slices while the thread future runs."""
     try:
         await asyncio.wait_for(asyncio.shield(fut), timeout=seconds)
     except asyncio.TimeoutError:
@@ -261,7 +278,6 @@ async def _tick(fut, seconds=1.05):
 
 
 async def scan_single_animated(msg, email):
-    """Animated single scan. Returns (result, elapsed_seconds, message)."""
     t0 = time.monotonic()
     fut = asyncio.ensure_future(asyncio.to_thread(check_hi2_email, email))
     target = None
@@ -272,12 +288,13 @@ async def scan_single_animated(msg, email):
         glyph = GLITCH[i % len(GLITCH)]
         track = _marquee(i)
         text = (
-            "┏━━〔 🩸 " + MARK_STAMP + " 〕━━┓\n"
-            f"   {track}\n"
-            f"   {frame} <i>{phase}</i>…\n"
-            f"   {glyph} <code>{html.escape(email)}</code>\n"
-            f"   ⏱ <i>{time.monotonic() - t0:.1f}s</i>\n"
-            "┗━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+            f"❖  <b>{MARK_STAMP}</b>  ❖\n"
+            f"{DIV}\n"
+            f"  {track}\n"
+            f"  {frame}  {phase}…\n"
+            f"  {glyph}  <code>{html.escape(email)}</code>\n"
+            f"  ⏱  {time.monotonic() - t0:.1f}s\n"
+            f"{DIV}"
         )
         try:
             if target is None:
@@ -292,7 +309,6 @@ async def scan_single_animated(msg, email):
 
 
 async def scan_bulk_animated(msg, emails, status_msg):
-    """Animated bulk scan with live progress bar. Returns (lines, elapsed)."""
     t0 = time.monotonic()
     total = len(emails)
     lines = []
@@ -303,11 +319,12 @@ async def scan_bulk_animated(msg, emails, status_msg):
         while not fut.done():
             done = idx - 1
             body = [
-                "┏━━〔 🩸 " + MARK_STAMP + " · 𝐁𝐔𝐋𝐊 〕━━┓",
-                f"   ⟦{_bar(done, total)}⟧ <b>{int(100 * done / total)}%</b> · {done}/{total}",
-                f"   {SPINNER[i % len(SPINNER)]} <i>ꜱᴄᴀɴɴɪɴɢ</i> <code>{html.escape(email)}</code>",
-                f"   {_marquee(i)}",
-                "┗━━━━━━━━━━━━━━━━━━━━━━━━━┛",
+                f"❖  <b>{MARK_STAMP}</b>  ·  ʙᴜʟᴋ  ❖",
+                DIV,
+                f"  ⟦{_bar(done, total)}⟧  <b>{int(100 * done / total)}%</b>  ·  {done}/{total}",
+                f"  {SPINNER[i % len(SPINNER)]}  ꜱᴄᴀɴɴɪɴɢ  <code>{html.escape(email)}</code>",
+                f"  {_marquee(i)}",
+                DIV,
             ]
             if lines:
                 body.append("")
@@ -321,7 +338,7 @@ async def scan_bulk_animated(msg, emails, status_msg):
 
         result = fut.result()
         mark, label, _ = VERDICT.get(result, VERDICT["unknown"])
-        lines.append(f"{idx:02d}  {mark} <code>{html.escape(email)}</code>  ‣ <b>{label}</b>")
+        lines.append(f"{idx:02d}  {mark}  <code>{html.escape(email)}</code>  ‣  {label}")
         await asyncio.sleep(0.2)
 
     return lines, time.monotonic() - t0
@@ -331,40 +348,44 @@ def single_report(email, result, elapsed, uid, u):
     mark, label, note = VERDICT.get(result, VERDICT["unknown"])
     node = email.split("@", 1)[1] if "@" in email else "hi2.in"
     return (
-        f"╭━━〔 <b>{BRAND}</b> · 𝐕𝐄𝐑𝐃𝐈𝐂𝐓 〕━━╮\n"
-        f"   {mark}  <b>{label}</b>\n"
-        f"   <i>{note}</i>\n\n"
-        f"   ◈ 𝗧𝗮𝗿𝗴𝗲𝘁    ‣ <code>{html.escape(email)}</code>\n"
-        f"   ◈ 𝗡𝗼𝗱𝗲      ‣ {html.escape(node)}\n"
-        f"   ◈ 𝗟𝗮𝘁𝗲𝗻𝗰𝘆   ‣ {elapsed:.2f}s\n"
-        f"   ◈ 𝗦𝗰𝗮𝗻 𝗜𝗗   ‣ #{scan_id()}\n"
-        f"   ◈ 𝗦𝘁𝗮𝗺𝗽     ‣ {stamp()}\n\n"
-        f"   {SIGN}\n"
-        f"⚡ <b>𝐁𝐀𝐋𝐀𝐍𝐂𝐄</b> ‣ {html.escape(credits_label(uid, u))}"
+        f"❖  <b>{BRAND}</b>  ·  ᴠᴇʀᴅɪᴄᴛ  ❖\n"
+        f"{DIV}\n"
+        f"  {mark}  <b>{label}</b>\n"
+        f"  <i>{note}</i>\n"
+        f"\n"
+        f"  ᴛᴀʀɢᴇᴛ  ‣  <code>{html.escape(email)}</code>\n"
+        f"  ɴᴏᴅᴇ    ‣  {html.escape(node)}\n"
+        f"  ʟᴀᴛᴇɴᴄʏ ‣  {elapsed:.2f}s\n"
+        f"  ꜱᴄᴀɴ ɪᴅ ‣  #{scan_id()}\n"
+        f"  ꜱᴛᴀᴍᴘ   ‣  {stamp()}\n"
+        f"{DIV}\n"
+        f"  ⚡ <b>ʙᴀʟᴀɴᴄᴇ</b>  ‣  {html.escape(credits_label(uid, u))}\n"
+        f"  <i>{SIGN}</i>"
     )
 
 
 def bulk_report_chunks(lines, valid_count, elapsed):
-    """Splits the bulk report so huge batches never break the 4096 limit."""
-    free = sum(1 for l in lines if "𝐅 𝐑 𝐄 𝐄" in l)
-    taken = sum(1 for l in lines if "𝐓 𝐀 𝐊 𝐄 𝐍" in l)
+    free = sum(1 for l in lines if "ꜰʀᴇᴇ" in l)
+    taken = sum(1 for l in lines if "ᴛᴀᴋᴇɴ" in l)
     unknown = valid_count - free - taken
 
     header = (
-        f"╭━━〔 <b>{BRAND}</b> · 𝐒𝐂𝐀𝐍 𝐑𝐄𝐏𝐎𝐑𝐓 〕━━╮\n"
-        f"   ⟨{_bar(valid_count, valid_count)}⟩ <b>100%</b> · {valid_count} ᴛᴀʀɢᴇᴛꜱ\n\n"
+        f"❖  <b>{BRAND}</b>  ·  ꜱᴄᴀɴ ʀᴇᴘᴏʀᴛ  ❖\n"
+        f"{DIV}\n"
+        f"  ⟦{_bar(valid_count, valid_count)}⟧  <b>100%</b>  ·  {valid_count} ᴛᴀʀɢᴇᴛꜱ\n\n"
     )
     footer = (
-        "\n┌─ 𝐒 𝐔 𝐌 𝐌 𝐀 𝐑 𝐘 ─┐\n"
-        f"   🟢 𝗙𝗿𝗲𝗲      ‣ <b>{free}</b>\n"
-        f"   🔴 𝗧𝗮𝗸𝗲𝗻     ‣ <b>{taken}</b>\n"
-        f"   🟡 𝗨𝗻𝗸𝗻𝗼𝘄𝗻   ‣ <b>{unknown}</b>\n"
-        f"   📦 𝗧𝗼𝘁𝗮𝗹     ‣ <b>{valid_count}</b>\n"
-        f"   ⏱ 𝗧𝗶𝗺𝗲      ‣ {elapsed:.2f}s\n"
-        f"   🆔 𝗦𝗰𝗮𝗻 𝗜𝗗   ‣ #{scan_id()}\n"
-        f"   📅 𝗦𝘁𝗮𝗺𝗽     ‣ {stamp()}\n"
-        "└──────────────────┘\n"
-        f"   {SIGN}"
+        f"\n{DIV}\n"
+        f"  ꜱᴜᴍᴍᴀʀʏ\n"
+        f"  ○ ꜰʀᴇᴇ      ‣  <b>{free}</b>\n"
+        f"  ◉ ᴛᴀᴋᴇɴ     ‣  <b>{taken}</b>\n"
+        f"  ◎ ᴜɴᴋɴᴏᴡɴ   ‣  <b>{unknown}</b>\n"
+        f"  ▪ ᴛᴏᴛᴀʟ     ‣  <b>{valid_count}</b>\n"
+        f"  ⏱ ᴛɪᴍᴇ     ‣  {elapsed:.2f}s\n"
+        f"  ⬡ ꜱᴄᴀɴ ɪᴅ  ‣  #{scan_id()}\n"
+        f"  ⬡ ꜱᴛᴀᴍᴘ    ‣  {stamp()}\n"
+        f"{DIV}\n"
+        f"  <i>{SIGN}</i>"
     )
 
     chunks, size = [], 35
@@ -374,7 +395,7 @@ def bulk_report_chunks(lines, valid_count, elapsed):
             text = header + "\n".join(part)
         else:
             text = (
-                f"   … ᴄᴏɴᴛɪɴᴜᴇᴅ ({start + 1}–{start + len(part)})\n\n"
+                f"  … ᴄᴏɴᴛɪɴᴜᴇᴅ  ({start + 1}–{start + len(part)})\n\n"
                 + "\n".join(part)
             )
         chunks.append(text)
@@ -387,15 +408,15 @@ def bulk_report_chunks(lines, valid_count, elapsed):
 
 def skipped_report(invalid):
     return (
-        "⚠️ <b>𝐒 𝐊 𝐈 𝐏 𝐏 𝐄 𝐃</b>\n"
-        "┌──────────────────────────┐\n"
-        + "\n".join(f"   ‣ <code>{html.escape(x)}</code>  ↳ <i>ᴜɴꜱᴜᴘᴘᴏʀᴛᴇᴅ ɴᴏᴅᴇ</i>" for x in invalid)
-        + "\n└──────────────────────────┘"
+        f"⚠  <b>ꜱᴋɪᴘᴘᴇᴅ</b>\n"
+        f"{DIV}\n"
+        + "\n".join(f"  ‣  <code>{html.escape(x)}</code>  ·  ᴜɴꜱᴜᴘᴘᴏʀᴛᴇᴅ ɴᴏᴅᴇ" for x in invalid)
+        + f"\n{DIV}"
     )
 
 
 # ──────────────────────────────────────────────────────────────
-# DATABASE / HELPERS
+# DATABASE
 # ──────────────────────────────────────────────────────────────
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
@@ -451,7 +472,6 @@ def trim(lst, cap):
 
 
 def log_check(uid, u, email, result, mode, save=True):
-    """Records a check for the owner's history + stats."""
     DB["stats"]["total"] = DB["stats"].get("total", 0) + 1
     DB["stats"][mode] = DB["stats"].get(mode, 0) + 1
     DB["stats"][result] = DB["stats"].get(result, 0) + 1
@@ -506,7 +526,7 @@ def has_unlimited(uid, u=None):
 
 
 def credits_label(uid, u):
-    return "♾️ UNLIMITED" if has_unlimited(uid, u) else f"⚡ {u.get('credits', 0)} credits"
+    return "♾ ᴜɴʟɪᴍɪᴛᴇᴅ" if has_unlimited(uid, u) else f"⚡ {u.get('credits', 0)}"
 
 
 def who(u, uid=None):
@@ -517,7 +537,6 @@ def who(u, uid=None):
 
 
 async def send_rich(bot, chat_id, text):
-    """Sends raw text (HTML if possible, plain otherwise)."""
     try:
         await bot.send_message(int(chat_id), text, parse_mode="HTML")
         return True
@@ -536,106 +555,100 @@ async def send_rich(bot, chat_id, text):
 # ──────────────────────────────────────────────────────────────
 def menu_text(uid, u):
     role = (
-        "👑 OWNER" if is_owner(uid)
-        else "🛡️ ADMIN" if is_admin(uid)
-        else "💎 PREMIUM" if u.get("unlimited")
-        else "🆓 FREE"
+        "ᴏᴡɴᴇʀ" if is_owner(uid)
+        else "ᴀᴅᴍɪɴ" if is_admin(uid)
+        else "ᴘʀᴇᴍɪᴜᴍ" if u.get("unlimited")
+        else "ꜰʀᴇᴇ"
     )
     display_name = html.escape((u.get("name") or "User").strip()[:48])
     power = html.escape(credits_label(uid, u))
     return (
-        "╭━━━〔 🌌 <b>OBITO NEXUS</b> 🌌 〕━━━╮\n"
-        "┃\n"
-        "┃  🎴 <b>W E L C O M E  A B O A R D</b>\n"
-        "┃\n"
-        f"┃  👤 <b>USER</b>  ·  {display_name}\n"
-        f"┃  💠 <b>PLAN</b>  ·  {role}\n"
-        f"┃  ⚡ <b>POWER</b> ·  {power}\n"
-        "┃\n"
-        "╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n"
-        "⟡ <i>Precision  •  Speed  •  Power</i>\n"
-        "✦ ─── ✦ ─── ✦ ─── ✦ ─── ✦\n"
-        "🚀 <b>Choose Your Path Below</b>\n"
-        "✦ ─── ✦ ─── ✦ ─── ✦ ─── ✦"
+        f"❖  <b>{BRAND}</b>  ❖\n"
+        f"{DIV}\n"
+        f"  ᴡᴇʟᴄᴏᴍᴇ ᴀʙᴏᴀʀᴅ\n"
+        f"\n"
+        f"  ᴜꜱᴇʀ    ‣  {display_name}\n"
+        f"  ᴘʟᴀɴ    ‣  {role}\n"
+        f"  ᴘᴏᴡᴇʀ   ‣  {power}\n"
+        f"{DIV}\n"
+        f"  ᴘʀᴇᴄɪꜱɪᴏɴ · ꜱᴘᴇᴇᴅ · ᴘᴏᴡᴇʀ\n"
+        f"{DIV}\n"
+        f"  ▸ ᴄʜᴏᴏꜱᴇ ʏᴏᴜʀ ᴘᴀᴛʜ ʙᴇʟᴏᴡ"
     )
 
 
 def main_keyboard(uid):
     rows = [
-        [InlineKeyboardButton("⚡ 𝑺𝒊𝒏𝒈𝒍𝒆", callback_data="single"),
-         InlineKeyboardButton("🚀 𝑩𝒖𝒍𝒌", callback_data="bulk")],
-        [InlineKeyboardButton("📊 𝑴𝒚 𝑺𝒕𝒂𝒕𝒔", callback_data="status"),
-         InlineKeyboardButton("🎁 𝑹𝒆𝒅𝒆𝒆𝒎", callback_data="redeem")],
-        [InlineKeyboardButton("🔗 𝑹𝒆𝒇𝒆𝒓 & 𝑬𝒂𝒓𝒏", callback_data="refer"),
-         InlineKeyboardButton("💎 𝑷𝒓𝒆𝒎𝒊𝒖𝒎", callback_data="premium")],
-        [InlineKeyboardButton("💬 𝑺𝒖𝒑𝒑𝒐𝒓𝒕", url=f"https://t.me/{SUPPORT_CHAT}"),
-         InlineKeyboardButton("👑 𝑶𝒘𝒏𝒆𝒓", url=f"https://t.me/{OWNER_USERNAME}")],
+        [InlineKeyboardButton("· ꜱɪɴɢʟᴇ ·", callback_data="single"),
+         InlineKeyboardButton("· ʙᴜʟᴋ ·", callback_data="bulk")],
+        [InlineKeyboardButton("· ꜱᴛᴀᴛꜱ ·", callback_data="status"),
+         InlineKeyboardButton("· ʀᴇᴅᴇᴇᴍ ·", callback_data="redeem")],
+        [InlineKeyboardButton("· ʀᴇꜰᴇʀ ·", callback_data="refer"),
+         InlineKeyboardButton("· ᴘʀᴇᴍɪᴜᴍ ·", callback_data="premium")],
+        [InlineKeyboardButton("· ꜱᴜᴘᴘᴏʀᴛ ·", url=f"https://t.me/{SUPPORT_CHAT}"),
+         InlineKeyboardButton("· ᴄʜᴀɴɴᴇʟ ·", url=f"https://t.me/{CHANNEL}")],
     ]
     if is_staff(uid):
-        rows.append([InlineKeyboardButton("🛡️ Admin panel", callback_data="panel")])
+        rows.append([InlineKeyboardButton("▸ ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ ◂", callback_data="panel")])
     return InlineKeyboardMarkup(rows)
 
 
 def back_keyboard():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 𝑴𝒂𝒊𝒏 𝑴𝒆𝒏𝒖", callback_data="home")]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("· ʀᴇᴛᴜʀɴ ·", callback_data="home")]])
 
 
 def panel_back():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 𝑷𝒂𝒏𝒆𝒍", callback_data="panel"),
-         InlineKeyboardButton("🏠 𝑴𝒂𝒊𝒏 𝑴𝒆𝒏𝒖", callback_data="home")],
+        [InlineKeyboardButton("· ᴘᴀɴᴇʟ ·", callback_data="panel"),
+         InlineKeyboardButton("· ʜᴏᴍᴇ ·", callback_data="home")],
     ])
 
 
 def panel_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Stats", callback_data="p_stats"),
-         InlineKeyboardButton("📜 Check log", callback_data="p_history")],
-        [InlineKeyboardButton("👥 Users", callback_data="p_users"),
-         InlineKeyboardButton("💎 Premium", callback_data="p_premium")],
-        [InlineKeyboardButton("🔗 Referrals", callback_data="p_refs"),
-         InlineKeyboardButton("🎁 Claims", callback_data="p_claims")],
-        [InlineKeyboardButton("🛡️ Admins", callback_data="p_admins"),
-         InlineKeyboardButton("📨 DM user", callback_data="dm_uid")],
-        [InlineKeyboardButton("🎟️ Gen code", callback_data="gen_code"),
-         InlineKeyboardButton("📜 Codes", callback_data="list_codes")],
-        [InlineKeyboardButton("💰 Add credits", callback_data="add_credits"),
-         InlineKeyboardButton("♾️ Grant premium", callback_data="grant")],
-        [InlineKeyboardButton("🚫 Revoke premium", callback_data="revoke"),
-         InlineKeyboardButton("👤 User info", callback_data="userinfo")],
-        [InlineKeyboardButton("📢 Global broadcast", callback_data="broadcast")],
-        [InlineKeyboardButton("🏠 𝑴𝒂𝒊𝒏 𝑴𝒆𝒏𝒖", callback_data="home")],
+        [InlineKeyboardButton("· ꜱᴛᴀᴛꜱ ·", callback_data="p_stats"),
+         InlineKeyboardButton("· ʟᴏɢ ·", callback_data="p_history")],
+        [InlineKeyboardButton("· ᴜꜱᴇʀꜱ ·", callback_data="p_users"),
+         InlineKeyboardButton("· ᴘʀᴇᴍɪᴜᴍ ·", callback_data="p_premium")],
+        [InlineKeyboardButton("· ʀᴇꜰꜱ ·", callback_data="p_refs"),
+         InlineKeyboardButton("· ᴄʟᴀɪᴍꜱ ·", callback_data="p_claims")],
+        [InlineKeyboardButton("· ᴀᴅᴍɪɴꜱ ·", callback_data="p_admins"),
+         InlineKeyboardButton("· ᴅᴍ ·", callback_data="dm_uid")],
+        [InlineKeyboardButton("· ɢᴇɴ ᴄᴏᴅᴇ ·", callback_data="gen_code"),
+         InlineKeyboardButton("· ᴄᴏᴅᴇꜱ ·", callback_data="list_codes")],
+        [InlineKeyboardButton("· ᴄʀᴇᴅɪᴛꜱ ·", callback_data="add_credits"),
+         InlineKeyboardButton("· ɢʀᴀɴᴛ ·", callback_data="grant")],
+        [InlineKeyboardButton("· ʀᴇᴠᴏᴋᴇ ·", callback_data="revoke"),
+         InlineKeyboardButton("· ɪɴꜰᴏ ·", callback_data="userinfo")],
+        [InlineKeyboardButton("· ʙʀᴏᴀᴅᴄᴀꜱᴛ ·", callback_data="broadcast")],
+        [InlineKeyboardButton("▸ ʜᴏᴍᴇ ◂", callback_data="home")],
     ])
 
 
 SINGLE_TEXT = (
-    "╭━━〔 🩸 <b>𝐒 𝐈 𝐍 𝐆 𝐋 𝐄   𝐒 𝐂 𝐀 𝐍</b> 〕━━╮\n"
-    "┃\n"
-    "┃  ◈ Feed me <b>one</b> email.\n"
-    "┃\n"
-    "┃  ┌─ 𝐄 𝐗 𝐀 𝐌 𝐏 𝐋 𝐄 ─┐\n"
-    "┃  ‣ <code>obito@hi2.in</code>\n"
-    "┃  └────────────┘\n"
-    "┃\n"
-    "┃  ⟡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴏʙɪᴛᴏ ꜰʀᴀᴍᴇᴡᴏʀᴋ\n"
-    "╰━━━━━━━━━━━━━━━━╯"
+    f"❖  <b>ꜱɪɴɢʟᴇ  ꜱᴄᴀɴ</b>  ❖\n"
+    f"{DIV}\n"
+    f"  ꜰᴇᴇᴅ ᴍᴇ ᴏɴᴇ ᴇᴍᴀɪʟ\n"
+    f"\n"
+    f"  · ᴇxᴀᴍᴘʟᴇ ·\n"
+    f"  <code>obito@hi2.in</code>\n"
+    f"{DIV}\n"
+    f"  <i>{SIGN}</i>"
 )
 
 
 def bulk_text():
     return (
-        "╭━━〔 🩸 <b>𝐁 𝐔 𝐋 𝐊   𝐒 𝐂 𝐀 𝐍</b> 〕━━╮\n"
-        "┃\n"
-        "┃  ◈ Feed me <b>unlimited</b> emails.\n"
-        "┃  ◈ Spaces, commas or new lines — all fine.\n"
-        "┃\n"
-        "┃  ┌─ 𝐄 𝐗 𝐀 𝐌 𝐏 𝐋 𝐄 ─┐\n"
-        "┃  ‣ <code>obito@hi2.in</code>\n"
-        "┃  ‣ <code>uchiha@hi2.in</code>\n"
-        "┃  └────────────┘\n"
-        "┃\n"
-        "┃  ⟡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴏʙɪᴛᴏ ꜰʀᴀᴍᴇᴡᴏʀᴋ\n"
-        "╰━━━━━━━━━━━━━━━━╯"
+        f"❖  <b>ʙᴜʟᴋ  ꜱᴄᴀɴ</b>  ❖\n"
+        f"{DIV}\n"
+        f"  ꜰᴇᴇᴅ ᴍᴇ ᴜɴʟɪᴍɪᴛᴇᴅ ᴇᴍᴀɪʟꜱ\n"
+        f"  ꜱᴘᴀᴄᴇ · ᴄᴏᴍᴍᴀ · ɴᴇᴡ ʟɪɴᴇ\n"
+        f"\n"
+        f"  · ᴇxᴀᴍᴘʟᴇ ·\n"
+        f"  <code>obito@hi2.in</code>\n"
+        f"  <code>uchiha@hi2.in</code>\n"
+        f"{DIV}\n"
+        f"  <i>{SIGN}</i>"
     )
 
 
@@ -645,37 +658,36 @@ def panel_text():
     premium = sum(1 for x in DB["users"].values() if x.get("unlimited"))
     refs = sum(len(x.get("referred_users", [])) for x in DB["users"].values())
     return (
-        "🛡️ <b>𝐀𝐃𝐌𝐈𝐍 𝐏𝐀𝐍𝐄𝐋</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"👥 Users        ‣ <b>{len(DB['users'])}</b>\n"
-        f"💎 Premium      ‣ <b>{premium}</b>\n"
-        f"🛡️ Admins       ‣ <b>{len(DB['admins'])}</b>\n"
-        f"🎟️ Codes        ‣ <b>{len(DB['redeem_codes'])}</b>\n"
-        f"🔗 Referrals    ‣ <b>{refs}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔎 Checks total ‣ <b>{s.get('total', 0)}</b>\n"
-        f"   ‣ ⚡ single {s.get('single', 0)} · 🚀 bulk {s.get('bulk', 0)}\n"
-        f"   ‣ 🟢 {s.get('not_taken', 0)} · 🔴 {s.get('taken', 0)} · 🟡 {s.get('unknown', 0)}\n"
-        f"   ‣ 🎁 claims {len(DB['redeem_log'])}\n"
-        f"   ‣ 💠 premium grants {len(DB['premium_log'])}\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"   {SIGN}"
+        f"❖  <b>ᴀᴅᴍɪɴ ᴘᴀɴᴇʟ</b>  ❖\n"
+        f"{DIV}\n"
+        f"  ᴜꜱᴇʀꜱ      ‣  <b>{len(DB['users'])}</b>\n"
+        f"  ᴘʀᴇᴍɪᴜᴍ    ‣  <b>{premium}</b>\n"
+        f"  ᴀᴅᴍɪɴꜱ     ‣  <b>{len(DB['admins'])}</b>\n"
+        f"  ᴄᴏᴅᴇꜱ      ‣  <b>{len(DB['redeem_codes'])}</b>\n"
+        f"  ʀᴇꜰꜱ       ‣  <b>{refs}</b>\n"
+        f"{DIV}\n"
+        f"  ᴄʜᴇᴄᴋꜱ     ‣  <b>{s.get('total', 0)}</b>\n"
+        f"    ꜱɪɴɢʟᴇ   ‣  {s.get('single', 0)}   ·   ʙᴜʟᴋ  ‣  {s.get('bulk', 0)}\n"
+        f"    ꜰʀᴇᴇ     ‣  {s.get('not_taken', 0)}   ·   ᴛᴀᴋᴇɴ ‣  {s.get('taken', 0)}\n"
+        f"    ᴄʟᴀɪᴍꜱ   ‣  {len(DB['redeem_log'])}   ·   ɢʀᴀɴᴛꜱ ‣  {len(DB['premium_log'])}\n"
+        f"{DIV}\n"
+        f"  <i>{SIGN}</i>"
     )
 
 
 def history_text():
     rows = DB["checks"][-LIST_PAGE:]
     if not rows:
-        return "📜 <b>𝐂𝐇𝐄𝐂𝐊 𝐋𝐎𝐆</b>\n\nNo checks recorded yet."
+        return f"❖  <b>ᴄʜᴇᴄᴋ ʟᴏɢ</b>  ❖\n{DIV}\n  ɴᴏ ᴄʜᴇᴄᴋꜱ ʀᴇᴄᴏʀᴅᴇᴅ."
     out = [
-        "📜 <b>𝐂𝐇𝐄𝐂𝐊 𝐋𝐎𝐆</b>",
-        f"<i>last {len(rows)} of {len(DB['checks'])}</i>",
-        "━━━━━━━━━━━━━━━━━━━━",
+        f"❖  <b>ᴄʜᴇᴄᴋ ʟᴏɢ</b>  ❖",
+        f"<i>ʟᴀꜱᴛ {len(rows)} ᴏꜰ {len(DB['checks'])}</i>",
+        DIV,
     ]
     for r in reversed(rows):
         out.append(
-            f"{MARK.get(r['result'], '❔')} <code>{html.escape(r['email'])}</code>\n"
-            f"   👤 {who(r, r['uid'])} · {r.get('ts', '')} · {r.get('mode', '')}"
+            f"{MARK.get(r['result'], '?')}  <code>{html.escape(r['email'])}</code>\n"
+            f"   {who(r, r['uid'])}  ·  {r.get('ts', '')}"
         )
     return "\n".join(out)
 
@@ -683,78 +695,78 @@ def history_text():
 def users_text():
     users = sorted(DB["users"].items(), key=lambda kv: kv[1].get("joined", ""), reverse=True)
     if not users:
-        return "👥 <b>𝐔𝐒𝐄𝐑𝐒</b>\n\nNo users yet."
-    out = ["👥 <b>𝐔𝐒𝐄𝐑𝐒</b>", f"<i>last {min(len(users), LIST_PAGE)} of {len(users)}</i>", "━━━━━━━━━━━━━━━━━━━━"]
+        return f"❖  <b>ᴜꜱᴇʀꜱ</b>  ❖\n{DIV}\n  ɴᴏ ᴜꜱᴇʀꜱ ʏᴇᴛ."
+    out = [f"❖  <b>ᴜꜱᴇʀꜱ</b>  ❖", f"<i>ʟᴀꜱᴛ {min(len(users), LIST_PAGE)} ᴏꜰ {len(users)}</i>", DIV]
     for uid, u in users[:LIST_PAGE]:
-        tag = "♾️" if u.get("unlimited") else f"⚡{u.get('credits', 0)}"
-        out.append(f"{tag} {who(u, uid)}")
+        tag = "♾" if u.get("unlimited") else f"⚡{u.get('credits', 0)}"
+        out.append(f"{tag}  {who(u, uid)}")
     return "\n".join(out)
 
 
 def premium_text():
     rows = [(uid, u) for uid, u in DB["users"].items() if u.get("unlimited")]
-    out = ["💎 <b>𝐏𝐑𝐄𝐌𝐈𝐔𝐌 𝐔𝐒𝐄𝐑𝐒</b>", f"<i>{len(rows)} active</i>", "━━━━━━━━━━━━━━━━━━━━"]
+    out = [f"❖  <b>ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀꜱ</b>  ❖", f"<i>{len(rows)} ᴀᴄᴛɪᴠᴇ</i>", DIV]
     if not rows:
-        out.append("No premium users yet.")
+        out.append("  ɴᴏ ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀꜱ ʏᴇᴛ.")
     for uid, u in rows[-LIST_PAGE:]:
-        out.append(f"♾️ {who(u, uid)}")
+        out.append(f"♾  {who(u, uid)}")
     if DB["premium_log"]:
-        out.append("\n<b>ʀᴇᴄᴇɴᴛ ᴍᴏᴠᴇᴍᴇɴᴛꜱ</b>")
+        out.append("\n<b>ʀᴇᴄᴇɴᴛ</b>")
         for r in reversed(DB["premium_log"][-8:]):
-            icon = "✅" if r["action"] == "grant" else "🚫"
-            out.append(f"{icon} <code>{r['uid']}</code> · {r['action']} · {r['ts']}")
+            icon = "✓" if r["action"] == "grant" else "✕"
+            out.append(f"{icon}  <code>{r['uid']}</code>  ·  {r['action']}  ·  {r['ts']}")
     return "\n".join(out)
 
 
 def refs_text():
     rows = [(uid, u) for uid, u in DB["users"].items() if u.get("referred_users")]
     total = sum(len(u.get("referred_users", [])) for _, u in rows)
-    out = ["🔗 <b>𝐑𝐄𝐅𝐄𝐑𝐑𝐀𝐋𝐒</b>", f"<i>{total} total invites</i>", "━━━━━━━━━━━━━━━━━━━━"]
+    out = [f"❖  <b>ʀᴇꜰᴇʀʀᴀʟꜱ</b>  ❖", f"<i>{total} ᴛᴏᴛᴀʟ ɪɴᴠɪᴛᴇꜱ</i>", DIV]
     if not rows:
-        out.append("No referrals yet.")
+        out.append("  ɴᴏ ʀᴇꜰᴇʀʀᴀʟꜱ ʏᴇᴛ.")
     for uid, u in sorted(rows, key=lambda kv: len(kv[1]["referred_users"]), reverse=True)[:LIST_PAGE]:
         kids = u["referred_users"]
-        out.append(f"👤 {who(u, uid)} ‣ <b>{len(kids)}</b> invited")
+        out.append(f"·  {who(u, uid)}  ‣  <b>{len(kids)}</b>")
         for k in kids[:4]:
             ku = DB["users"].get(k, {})
-            out.append(f"   ↳ {who(ku, k)}")
+            out.append(f"     {who(ku, k)}")
     return "\n".join(out)
 
 
 def claims_text():
-    out = ["🎁 <b>𝐂𝐑𝐄𝐃𝐈𝐓 𝐂𝐋𝐀𝐈𝐌𝐒</b>", f"<i>{len(DB['redeem_log'])} claims</i>", "━━━━━━━━━━━━━━━━━━━━"]
+    out = [f"❖  <b>ᴄʀᴇᴅɪᴛ ᴄʟᴀɪᴍꜱ</b>  ❖", f"<i>{len(DB['redeem_log'])} ᴄʟᴀɪᴍꜱ</i>", DIV]
     if not DB["redeem_log"]:
-        out.append("No claims yet.")
+        out.append("  ɴᴏ ᴄʟᴀɪᴍꜱ ʏᴇᴛ.")
     for r in reversed(DB["redeem_log"][-LIST_PAGE:]):
-        out.append(f"⚡ +{r['credits']} · <code>{r['uid']}</code> · {html.escape(r['code'])} · {r['ts']}")
+        out.append(f"⚡ +{r['credits']}  ·  <code>{r['uid']}</code>  ·  {html.escape(r['code'])}  ·  {r['ts']}")
     return "\n".join(out)
 
 
 def admins_text():
-    out = ["🛡️ <b>𝐀𝐃𝐌𝐈𝐍𝐒</b>", "━━━━━━━━━━━━━━━━━━━━"]
+    out = [f"❖  <b>ᴀᴅᴍɪɴꜱ</b>  ❖", DIV]
     for a in DB["admins"]:
         u = DB["users"].get(str(a), {})
-        tag = "👑 owner" if int(a) == OWNER_USER_ID else "🛡️ admin"
-        out.append(f"{tag} {who(u, a)}")
-    out.append("\n<i>➕ Add admin / ➖ Remove admin — owner only</i>")
+        tag = "♛ ᴏᴡɴᴇʀ" if int(a) == OWNER_USER_ID else "▸ ᴀᴅᴍɪɴ"
+        out.append(f"{tag}  {who(u, a)}")
+    out.append(f"\n<i>➕ ᴀᴅᴅ  ·  ➖ ʀᴇᴍᴏᴠᴇ  ·  ᴏᴡɴᴇʀ ᴏɴʟʏ</i>")
     return "\n".join(out)
 
 
 def admins_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Add admin", callback_data="add_admin"),
-         InlineKeyboardButton("➖ Remove admin", callback_data="remove_admin")],
-        [InlineKeyboardButton("🔙 𝑷𝒂𝒏𝒆𝒍", callback_data="panel"),
-         InlineKeyboardButton("🏠 𝑴𝒂𝒊𝒏 𝑴𝒆𝒏𝒖", callback_data="home")],
+        [InlineKeyboardButton("＋ ᴀᴅᴅ", callback_data="add_admin"),
+         InlineKeyboardButton("－ ʀᴇᴍᴏᴠᴇ", callback_data="remove_admin")],
+        [InlineKeyboardButton("· ᴘᴀɴᴇʟ ·", callback_data="panel"),
+         InlineKeyboardButton("· ʜᴏᴍᴇ ·", callback_data="home")],
     ])
 
 
 def users_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📜 Check log", callback_data="p_history"),
-         InlineKeyboardButton("🎁 Claims", callback_data="p_claims")],
-        [InlineKeyboardButton("🔙 𝑷𝒂𝒏𝒆𝒍", callback_data="panel"),
-         InlineKeyboardButton("🏠 𝑴𝒂𝒊𝒏 𝑴𝒆𝒏𝒖", callback_data="home")],
+        [InlineKeyboardButton("· ʟᴏɢ ·", callback_data="p_history"),
+         InlineKeyboardButton("· ᴄʟᴀɪᴍꜱ ·", callback_data="p_claims")],
+        [InlineKeyboardButton("· ᴘᴀɴᴇʟ ·", callback_data="panel"),
+         InlineKeyboardButton("· ʜᴏᴍᴇ ·", callback_data="home")],
     ])
 
 
@@ -823,16 +835,21 @@ async def bulk_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status_text(uid, u):
     refs = len(u.get("referred_users", []))
-    role = "OWNER" if is_owner(uid) else ("ADMIN" if is_admin(uid) else "USER")
+    role = "ᴏᴡɴᴇʀ" if is_owner(uid) else ("ᴀᴅᴍɪɴ" if is_admin(uid) else "ᴜꜱᴇʀ")
     mine = [r for r in DB["checks"] if r["uid"] == str(uid)]
     return (
-        "📊 <b>YOUR PROFILE</b>\n━━━━━━━━━━━━━━━━━━\n"
-        f"👤 Name: {html.escape(u.get('name', 'User'))}\n"
-        f"🆔 ID: <code>{uid}</code>\n"
-        f"🔗 Username: @{html.escape(u.get('username') or 'not set')}\n"
-        f"🛡️ Role: {role}\n💠 Plan: {'UNLIMITED' if has_unlimited(uid, u) else 'FREE'}\n"
-        f"⚡ Credits: {credits_label(uid, u)}\n👥 Referrals: {refs}\n"
-        f"🔎 Your checks: {len(mine)}"
+        f"❖  <b>ʏᴏᴜʀ ᴘʀᴏꜰɪʟᴇ</b>  ❖\n"
+        f"{DIV}\n"
+        f"  ɴᴀᴍᴇ       ‣  {html.escape(u.get('name', 'User'))}\n"
+        f"  ɪᴅ         ‣  <code>{uid}</code>\n"
+        f"  ᴜꜱᴇʀɴᴀᴍᴇ   ‣  @{html.escape(u.get('username') or 'not set')}\n"
+        f"  ʀᴏʟᴇ       ‣  {role}\n"
+        f"  ᴘʟᴀɴ       ‣  {'ᴜɴʟɪᴍɪᴛᴇᴅ' if has_unlimited(uid, u) else 'ꜰʀᴇᴇ'}\n"
+        f"  ᴘᴏᴡᴇʀ      ‣  {credits_label(uid, u)}\n"
+        f"  ʀᴇꜰꜱ       ‣  {refs}\n"
+        f"  ᴄʜᴇᴄᴋꜱ     ‣  {len(mine)}\n"
+        f"{DIV}\n"
+        f"  <i>{SIGN}</i>"
     )
 
 
@@ -861,7 +878,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_edit(q, await status_text(uid, u), back_keyboard())
     elif data == "redeem":
         context.user_data["action"] = "redeem"
-        await safe_edit(q, "🎁 <b>REDEEM CODE</b>\n\nSend your code (example: <code>OBITO-ABC123</code>).", back_keyboard())
+        await safe_edit(q, f"❖  <b>ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ</b>  ❖\n{DIV}\n  ꜱᴇɴᴅ ʏᴏᴜʀ ᴄᴏᴅᴇ\n  <code>OBITO-ABC123</code>\n{DIV}", back_keyboard())
     elif data == "refer":
         bot_username = context.bot_data.get("bot_username")
         if not bot_username:
@@ -871,68 +888,75 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         link = f"https://t.me/{bot_username}?start=ref_{uid}"
         await safe_edit(
             q,
-            "🔗 <b>ＲＥＦＥＲ & ＥＡＲＮ</b>\n"
-            "✦ ─── ✦ ─── ✦ ─── ✦\n\n"
-            f"Invite your friends with this link:\n<code>{link}</code>\n\n"
-            f"🎁 You earn <b>+{REFERRER_BONUS} credits</b>\n"
-            f"🌷 Your friend gets <b>+{REFERRED_BONUS} credits</b>",
+            f"❖  <b>ʀᴇꜰᴇʀ & ᴇᴀʀɴ</b>  ❖\n{DIV}\n"
+            f"  ɪɴᴠɪᴛᴇ ʏᴏᴜʀ ꜰʀɪᴇɴᴅꜱ\n"
+            f"  <code>{link}</code>\n\n"
+            f"  ʏᴏᴜ ᴇᴀʀɴ     ‣  +{REFERRER_BONUS} ᴄʀᴇᴅɪᴛꜱ\n"
+            f"  ꜰʀɪᴇɴᴅ ɢᴇᴛꜱ  ‣  +{REFERRED_BONUS} ᴄʀᴇᴅɪᴛꜱ\n"
+            f"{DIV}\n"
+            f"  <i>{SIGN}</i>",
             back_keyboard(),
         )
     elif data == "premium":
         s = DB["settings"]
         payment_text = (
-            f"💎 <b>PREMIUM PLAN</b>\n\nPrice: ₹{s.get('price', 100)}\n"
-            f"UPI: <code>{html.escape(str(s.get('upi_id', 'faridh@fam')))}</code>\n"
-            f"Name: {html.escape(str(s.get('upi_name', 'FARID')))}\n\n"
-            "Scan the QR and pay, then send the screenshot for verification."
+            f"❖  <b>ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴ</b>  ❖\n{DIV}\n"
+            f"  ᴘʀɪᴄᴇ   ‣  ₹{s.get('price', 100)}\n"
+            f"  ᴜᴘɪ     ‣  <code>{html.escape(str(s.get('upi_id', 'faridh@fam')))}</code>\n"
+            f"  ɴᴀᴍᴇ    ‣  {html.escape(str(s.get('upi_name', 'FARID')))}\n"
+            f"{DIV}\n"
+            f"  ꜱᴄᴀɴ ᴛʜᴇ ǫʀ · ᴘᴀʏ · ꜱᴇɴᴅ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ\n"
+            f"  ᴛᴏ  @{SUPPORT_CHAT}  ꜰᴏʀ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ\n"
+            f"{DIV}\n"
+            f"  <i>{SIGN}</i>"
         )
         await safe_edit(q, payment_text, back_keyboard())
         qr_file_id = s.get("qr_file_id")
         if qr_file_id:
             try:
-                await q.message.reply_photo(photo=qr_file_id, caption="💳 <b>UPI QR</b>", parse_mode="HTML")
+                await q.message.reply_photo(photo=qr_file_id, caption="❖ ᴜᴘɪ ǫʀ ❖", parse_mode="HTML")
             except (NetworkError, TimedOut, BadRequest) as exc:
                 log.warning("Could not send payment QR: %s", exc)
 
     # ── panel ────────────────────────────────────────────────
     elif data == "panel":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, panel_text(), panel_keyboard())
     elif data == "p_stats":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, panel_text(), panel_keyboard())
     elif data == "p_history":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, history_text(), users_keyboard())
     elif data == "p_users":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, users_text(), users_keyboard())
     elif data == "p_premium":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, premium_text(), panel_back())
     elif data == "p_refs":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, refs_text(), panel_back())
     elif data == "p_claims":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, claims_text(), panel_back())
     elif data == "p_admins":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         await safe_edit(q, admins_text(), admins_keyboard())
 
@@ -940,33 +964,36 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data in {"gen_code", "add_credits", "grant", "revoke", "userinfo", "broadcast",
                   "dm_uid", "add_admin", "remove_admin"}:
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         if data in {"add_admin", "remove_admin"} and not is_owner(uid):
-            await safe_edit(q, "⛔ Owner only.", panel_back())
+            await safe_edit(q, "⛔ ᴏᴡɴᴇʀ ᴏɴʟʏ.", panel_back())
             return
         context.user_data["action"] = data
         prompts = {
-            "gen_code": "Send: <code>CREDITS MAX_CLAIMS</code>",
-            "add_credits": "Send: <code>USER_ID AMOUNT</code>",
-            "grant": "Send the user ID to grant premium.",
-            "revoke": "Send the user ID to revoke premium.",
-            "userinfo": "Send a user ID.",
-            "broadcast": "Send the broadcast message (sent to everyone, exactly as typed).",
-            "dm_uid": "Send the target user ID.",
-            "add_admin": "Send the user ID to promote to admin.",
-            "remove_admin": "Send the admin user ID to demote.",
+            "gen_code": "ꜱᴇɴᴅ: <code>CREDITS MAX_CLAIMS</code>",
+            "add_credits": "ꜱᴇɴᴅ: <code>USER_ID AMOUNT</code>",
+            "grant": "ꜱᴇɴᴅ ᴛʜᴇ ᴜꜱᴇʀ ɪᴅ.",
+            "revoke": "ꜱᴇɴᴅ ᴛʜᴇ ᴜꜱᴇʀ ɪᴅ.",
+            "userinfo": "ꜱᴇɴᴅ ᴀ ᴜꜱᴇʀ ɪᴅ.",
+            "broadcast": "ꜱᴇɴᴅ ᴛʜᴇ ᴍᴇꜱꜱᴀɢᴇ.",
+            "dm_uid": "ꜱᴇɴᴅ ᴛʜᴇ ᴛᴀʀɢᴇᴛ ᴜꜱᴇʀ ɪᴅ.",
+            "add_admin": "ꜱᴇɴᴅ ᴛʜᴇ ᴜꜱᴇʀ ɪᴅ.",
+            "remove_admin": "ꜱᴇɴᴅ ᴛʜᴇ ᴀᴅᴍɪɴ ɪᴅ.",
         }
-        await safe_edit(q, f"🛠️ <b>ADMIN ACTION</b>\n\n{prompts[data]}", panel_back())
+        await safe_edit(
+            q, f"❖  <b>ᴀᴅᴍɪɴ ᴀᴄᴛɪᴏɴ</b>  ❖\n{DIV}\n  {prompts[data]}\n{DIV}",
+            panel_back(),
+        )
     elif data == "list_codes":
         if not is_staff(uid):
-            await safe_edit(q, "⛔ Not authorized.", back_keyboard())
+            await safe_edit(q, "⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.", back_keyboard())
             return
         if not DB["redeem_codes"]:
-            text = "📭 No redeem codes yet."
+            text = f"❖  <b>ᴄᴏᴅᴇꜱ</b>  ❖\n{DIV}\n  ɴᴏ ᴄᴏᴅᴇꜱ ʏᴇᴛ."
         else:
-            text = "📜 <b>REDEEM CODES</b>\n\n" + "\n".join(
-                f"<code>{html.escape(c)}</code> · {d['credits']} credits · {len(d.get('claimed_by', []))}/{d['max_claims']}"
+            text = f"❖  <b>ᴄᴏᴅᴇꜱ</b>  ❖\n{DIV}\n" + "\n".join(
+                f"  <code>{html.escape(c)}</code>\n    {d['credits']} ᴄʀ · {len(d.get('claimed_by', []))}/{d['max_claims']}"
                 for c, d in list(DB["redeem_codes"].items())[-30:]
             )
         await safe_edit(q, text, panel_back())
@@ -1013,11 +1040,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         code = text.upper()
         item = DB["redeem_codes"].get(code)
         if not item:
-            await msg.reply_text("❌ Invalid code.")
+            await msg.reply_text("✕ ɪɴᴠᴀʟɪᴅ ᴄᴏᴅᴇ.")
         elif str(uid) in item.get("claimed_by", []):
-            await msg.reply_text("ℹ️ You have already claimed this code.")
+            await msg.reply_text("· ʏᴏᴜ ᴀʟʀᴇᴀᴅʏ ᴄʟᴀɪᴍᴇᴅ ᴛʜɪꜱ ᴄᴏᴅᴇ.")
         elif len(item.get("claimed_by", [])) >= int(item.get("max_claims", 0)):
-            await msg.reply_text("⚠️ This code has reached its claim limit.")
+            await msg.reply_text("✕ ᴄᴏᴅᴇ ʟɪᴍɪᴛ ʀᴇᴀᴄʜᴇᴅ.")
         else:
             item.setdefault("claimed_by", []).append(str(uid))
             u["credits"] = u.get("credits", 0) + int(item["credits"])
@@ -1026,43 +1053,42 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             })
             trim(DB["redeem_log"], LOG_CAP)
             save_db()
-            await msg.reply_text(f"✅ Code redeemed! +{item['credits']} credits.\nBalance: {u['credits']}")
+            await msg.reply_text(f"✓ ʀᴇᴅᴇᴇᴍᴇᴅ.\n+{item['credits']} ᴄʀᴇᴅɪᴛꜱ\nʙᴀʟᴀɴᴄᴇ: {u['credits']}")
         context.user_data.pop("action", None)
         return
 
-    # ── personal DM (two steps) ──────────────────────────────
+    # ── personal DM ─────────────────────────────────────────
     if action == "dm_uid":
         target = text.strip()
         if not target.isdigit():
-            await msg.reply_text("⚠️ Send a numeric user ID.")
+            await msg.reply_text("⚠ ꜱᴇɴᴅ ᴀ ɴᴜᴍᴇʀɪᴄ ɪᴅ.")
             return
         context.user_data["dm_target"] = target
         context.user_data["action"] = "dm_text"
-        await msg.reply_text(f"✍️ Now send the message for <code>{target}</code>.", parse_mode="HTML")
+        await msg.reply_text(f"✍ ꜱᴇɴᴅ ᴛʜᴇ ᴍᴇꜱꜱᴀɢᴇ ꜰᴏʀ <code>{target}</code>.", parse_mode="HTML")
         return
 
     if action == "dm_text":
         target = context.user_data.pop("dm_target", None)
         context.user_data.pop("action", None)
         if not target:
-            await msg.reply_text("⚠️ Target lost, try again.")
+            await msg.reply_text("⚠ ᴛᴀʀɢᴇᴛ ʟᴏꜱᴛ.")
             return
         ok = await send_rich(context.bot, target, text)
-        await msg.reply_text("✅ Delivered." if ok else "❌ Delivery failed.")
+        await msg.reply_text("✓ ᴅᴇʟɪᴠᴇʀᴇᴅ." if ok else "✕ ᴅᴇʟɪᴠᴇʀʏ ꜰᴀɪʟᴇᴅ.")
         return
 
-    # ── single / bulk checks ─────────────────────────────────
+    # ── single / bulk checks ────────────────────────────────
     if action in {"single", "bulk"}:
         single_mode = action == "single"
         valid, invalid = parse_entries(text, single_mode)
 
         if not valid:
             await msg.reply_text(
-                "❌ <b>𝐍𝐎 𝐕𝐀𝐋𝐈𝐃 𝐓𝐀𝐑𝐆𝐄𝐓 𝐅𝐎𝐔𝐍𝐃</b>\n"
-                "┌──────────────────────────┐\n"
-                "   ‣ <code>user@hi2.in</code>\n"
-                "   ‣ <code>user2</code>\n"
-                "└──────────────────────────┘",
+                f"✕  <b>ɴᴏ ᴠᴀʟɪᴅ ᴛᴀʀɢᴇᴛ</b>\n{DIV}\n"
+                "  <code>user@hi2.in</code>\n"
+                "  <code>user2</code>\n"
+                f"{DIV}",
                 parse_mode="HTML",
             )
             return
@@ -1070,7 +1096,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cost = len(valid) * (SINGLE_CHECK_COST if single_mode else BULK_CHECK_COST)
         if not has_unlimited(uid, u) and u.get("credits", 0) < cost:
             await msg.reply_text(
-                f"❌ Not enough credits. Required: {cost}; balance: {u.get('credits', 0)}."
+                f"✕ ɪɴꜱᴜꜰꜰɪᴄɪᴇɴᴛ ᴄʀᴇᴅɪᴛꜱ.\nʀᴇǫᴜɪʀᴇᴅ: {cost} · ʙᴀʟᴀɴᴄᴇ: {u.get('credits', 0)}"
             )
             context.user_data.pop("action", None)
             return
@@ -1099,18 +1125,19 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop("action", None)
             return
 
-        # ── BULK (no limit) ──────────────────────────────────
+        # ── BULK ─────────────────────────────────────────────
         status_msg = await msg.reply_text(
-            "┏━━〔 🩸 " + MARK_STAMP + " · 𝐁𝐔𝐋𝐊 〕━━┓\n"
-            f"   ⟦{_bar(0, len(valid))}⟧ <b>0%</b>\n"
-            "   ◜ <i>ᴡᴀʀᴍɪɴɢ ᴜᴘ ꜱᴄᴀɴ ᴄᴏʀᴇ</i>…\n"
-            "┗━━━━━━━━━━━━━━━━━━━━━━━━━┛",
+            f"❖  <b>{MARK_STAMP}</b>  ·  ʙᴜʟᴋ  ❖\n"
+            f"{DIV}\n"
+            f"  ⟦{_bar(0, len(valid))}⟧  <b>0%</b>\n"
+            f"  ◜  ᴡᴀʀᴍɪɴɢ ᴄᴏʀᴇ…\n"
+            f"{DIV}",
             parse_mode="HTML",
         )
         lines, elapsed = await scan_bulk_animated(msg, valid, status_msg)
 
         for email, line in zip(valid, lines):
-            res = "taken" if "𝐓 𝐀 𝐊 𝐄 𝐍" in line else ("not_taken" if "𝐅 𝐑 𝐄 𝐄" in line else "unknown")
+            res = "taken" if "ᴛᴀᴋᴇɴ" in line else ("not_taken" if "ꜰʀᴇᴇ" in line else "unknown")
             log_check(uid, u, email, res, "bulk", save=False)
         save_db()
 
@@ -1141,7 +1168,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 DB["redeem_codes"][code] = {"credits": credits, "max_claims": max_claims, "claimed_by": []}
                 save_db()
                 await msg.reply_text(
-                    f"✅ Code created: <code>{code}</code>\nCredits: {credits} · Claims: {max_claims}",
+                    f"✓ ᴄᴏᴅᴇ ɢᴇɴᴇʀᴀᴛᴇᴅ\n<code>{code}</code>\n{credits} ᴄʀ · {max_claims} ᴄʟᴀɪᴍꜱ",
                     parse_mode="HTML",
                 )
             elif action == "add_credits":
@@ -1156,13 +1183,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 tu["credits"] = tu.get("credits", 0) + amount
                 save_db()
-                await msg.reply_text(f"✅ Added {amount} credits to <code>{target}</code>.", parse_mode="HTML")
+                await msg.reply_text(f"✓ +{amount} ᴄʀᴇᴅɪᴛꜱ → <code>{target}</code>", parse_mode="HTML")
                 await send_rich(
                     context.bot, target,
-                    "⚡ <b>𝐂𝐑𝐄𝐃𝐈𝐓𝐒 𝐀𝐃𝐃𝐄𝐃</b>\n"
-                    f"   ‣ +{amount} credits\n"
-                    f"   ‣ Balance: <b>{tu['credits']}</b>\n"
-                    f"   {SIGN}",
+                    f"❖  <b>ᴄʀᴇᴅɪᴛꜱ ᴀᴅᴅᴇᴅ</b>  ❖\n{DIV}\n"
+                    f"  +{amount} ᴄʀᴇᴅɪᴛꜱ\n  ʙᴀʟᴀɴᴄᴇ: <b>{tu['credits']}</b>\n{DIV}\n  <i>{SIGN}</i>",
                 )
             elif action in {"grant", "revoke"}:
                 target = str(int(text))
@@ -1175,50 +1200,51 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 trim(DB["premium_log"], LOG_CAP)
                 save_db()
                 await msg.reply_text(
-                    f"✅ Premium {'granted' if action == 'grant' else 'revoked'} for <code>{target}</code>.",
+                    f"✓ ᴘʀᴇᴍɪᴜᴍ {'ɢʀᴀɴᴛᴇᴅ' if action == 'grant' else 'ʀᴇᴠᴏᴋᴇᴅ'} → <code>{target}</code>",
                     parse_mode="HTML",
                 )
                 if action == "grant":
                     await send_rich(
                         context.bot, target,
-                        "💎 <b>𝐏𝐑𝐄𝐌𝐈𝐔𝐌 𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃</b>\n"
-                        "   ‣ Plan: ♾️ UNLIMITED\n"
-                        "   ‣ All scans are now free.\n"
-                        f"   {SIGN}",
+                        f"❖  <b>ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴛɪᴠᴀᴛᴇᴅ</b>  ❖\n{DIV}\n"
+                        f"  ᴘʟᴀɴ: ♾ ᴜɴʟɪᴍɪᴛᴇᴅ\n  ᴀʟʟ ꜱᴄᴀɴꜱ ꜰʀᴇᴇ.\n{DIV}\n  <i>{SIGN}</i>",
                     )
                 else:
                     await send_rich(
                         context.bot, target,
-                        "🚫 <b>𝐏𝐑𝐄𝐌𝐈𝐔𝐌 𝐄𝐗𝐏𝐈𝐑𝐄𝐃</b>\n"
-                        "   ‣ Plan: 🆓 FREE\n"
-                        f"   ‣ Credits: <b>{tu.get('credits', 0)}</b>\n"
-                        f"   {SIGN}",
+                        f"❖  <b>ᴘʀᴇᴍɪᴜᴍ ᴇxᴘɪʀᴇᴅ</b>  ❖\n{DIV}\n"
+                        f"  ᴘʟᴀɴ: ꜰʀᴇᴇ\n  ᴄʀᴇᴅɪᴛꜱ: <b>{tu.get('credits', 0)}</b>\n{DIV}\n  <i>{SIGN}</i>",
                     )
             elif action == "userinfo":
                 target = str(int(text))
                 tu = DB["users"].get(target)
                 if not tu:
-                    await msg.reply_text("User not found in the database.")
+                    await msg.reply_text("✕ ᴜꜱᴇʀ ɴᴏᴛ ꜰᴏᴜɴᴅ.")
                 else:
                     checks = [r for r in DB["checks"] if r["uid"] == target]
                     await msg.reply_text(
-                        f"👤 <b>User info</b>\nID: <code>{target}</code>\nName: {html.escape(tu.get('name', 'User'))}\n"
-                        f"Username: @{html.escape(tu.get('username') or 'not set')}\n"
-                        f"Credits: {tu.get('credits', 0)}\nPremium: {bool(tu.get('unlimited'))}\n"
-                        f"Referrals: {len(tu.get('referred_users', []))}\n"
-                        f"Checks done: {len(checks)}\nJoined: {tu.get('joined', '')[:16]}",
+                        f"❖  <b>ᴜꜱᴇʀ ɪɴꜰᴏ</b>  ❖\n{DIV}\n"
+                        f"  ɪᴅ        ‣  <code>{target}</code>\n"
+                        f"  ɴᴀᴍᴇ      ‣  {html.escape(tu.get('name', 'User'))}\n"
+                        f"  ᴜꜱᴇʀɴᴀᴍᴇ  ‣  @{html.escape(tu.get('username') or 'not set')}\n"
+                        f"  ᴄʀᴇᴅɪᴛꜱ   ‣  {tu.get('credits', 0)}\n"
+                        f"  ᴘʀᴇᴍɪᴜᴍ   ‣  {bool(tu.get('unlimited'))}\n"
+                        f"  ʀᴇꜰꜱ      ‣  {len(tu.get('referred_users', []))}\n"
+                        f"  ᴄʜᴇᴄᴋꜱ    ‣  {len(checks)}\n"
+                        f"  ᴊᴏɪɴᴇᴅ    ‣  {tu.get('joined', '')[:16]}\n"
+                        f"{DIV}",
                         parse_mode="HTML",
                     )
             elif action == "broadcast":
                 sent = failed = 0
-                await msg.reply_text(f"📢 Broadcasting to {len(DB['users'])} users…")
+                await msg.reply_text(f"❖ ʙʀᴏᴀᴅᴄᴀꜱᴛɪɴɢ ᴛᴏ {len(DB['users'])} ᴜꜱᴇʀꜱ…")
                 for target in list(DB["users"]):
                     if await send_rich(context.bot, target, text):
                         sent += 1
                     else:
                         failed += 1
                     await asyncio.sleep(0.05)
-                await msg.reply_text(f"✅ Broadcast finished.\nSent: {sent}\nFailed: {failed}")
+                await msg.reply_text(f"✓ ʙʀᴏᴀᴅᴄᴀꜱᴛ ᴅᴏɴᴇ.\nꜱᴇɴᴛ: {sent}\nꜰᴀɪʟᴇᴅ: {failed}")
             elif action in {"add_admin", "remove_admin"}:
                 if not is_owner(uid):
                     raise PermissionError
@@ -1229,25 +1255,24 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         save_db()
                         await send_rich(
                             context.bot, target,
-                            "🛡️ <b>𝐀𝐃𝐌𝐈𝐍 𝐀𝐂𝐂𝐄𝐒𝐒 𝐆𝐑𝐀𝐍𝐓𝐄𝐃</b>\n"
-                            "   ‣ Panel unlocked.\n"
-                            f"   {SIGN}",
+                            f"❖  <b>ᴀᴅᴍɪɴ ᴀᴄᴄᴇꜱꜱ ɢʀᴀɴᴛᴇᴅ</b>  ❖\n{DIV}\n  ᴘᴀɴᴇʟ ᴜɴʟᴏᴄᴋᴇᴅ.\n{DIV}\n  <i>{SIGN}</i>",
                         )
-                    await msg.reply_text(f"✅ <code>{target}</code> is now an admin.", parse_mode="HTML")
+                    await msg.reply_text(f"✓ <code>{target}</code> ɴᴏᴡ ᴀᴅᴍɪɴ.", parse_mode="HTML")
                 else:
                     if int(target) == OWNER_USER_ID:
-                        await msg.reply_text("👑 Owner can't be demoted.")
+                        await msg.reply_text("♛ ᴏᴡɴᴇʀ ᴄᴀɴ'ᴛ ʙᴇ ᴅᴇᴍᴏᴛᴇᴅ.")
                     else:
                         DB["admins"] = [x for x in DB["admins"] if int(x) != int(target)]
                         save_db()
                         await send_rich(
                             context.bot, target,
-                            "🚫 <b>𝐀𝐃𝐌𝐈𝐍 𝐀𝐂𝐂𝐄𝐒𝐒 𝐑𝐄𝐕𝐎𝐊𝐄𝐃</b>\n"
-                            f"   {SIGN}",
+                            f"❖  <b>ᴀᴅᴍɪɴ ᴀᴄᴄᴇꜱꜱ ʀᴇᴠᴏᴋᴇᴅ</b>  ❖\n{DIV}\n  <i>{SIGN}</i>",
                         )
-                        await msg.reply_text(f"✅ <code>{target}</code> demoted.", parse_mode="HTML")
+                        await msg.reply_text(f"✓ <code>{target}</code> ᴅᴇᴍᴏᴛᴇᴅ.", parse_mode="HTML")
+        except PermissionError:
+            await msg.reply_text("⛔ ᴏᴡɴᴇʀ ᴏɴʟʏ.")
         except (ValueError, TypeError):
-            await msg.reply_text("⚠️ Invalid format. Please check the requested format and try again.")
+            await msg.reply_text("⚠ ɪɴᴠᴀʟɪᴅ ꜰᴏʀᴍᴀᴛ.")
         context.user_data.pop("action", None)
         return
 
@@ -1257,17 +1282,17 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ──────────────────────────────────────────────────────────────
-# HIDDEN ADMIN COMMANDS (not in public list)
+# HIDDEN ADMIN COMMANDS
 # ──────────────────────────────────────────────────────────────
 async def setqr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
     user = update.effective_user
     if not user or not is_owner(user.id):
-        await msg.reply_text("⛔ Only the bot owner can set the payment QR.")
+        await msg.reply_text("⛔ ᴏᴡɴᴇʀ ᴏɴʟʏ.")
         return
     replied = msg.reply_to_message
     if not replied:
-        await msg.reply_text("Reply to an image with /setqr to save it as the payment QR.")
+        await msg.reply_text("ʀᴇᴘʟʏ ᴛᴏ ᴀɴ ɪᴍᴀɢᴇ ᴡɪᴛʜ /setqr")
         return
     file_id = None
     if replied.photo:
@@ -1275,18 +1300,18 @@ async def setqr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif replied.document and (replied.document.mime_type or "").startswith("image/"):
         file_id = replied.document.file_id
     if not file_id:
-        await msg.reply_text("⚠️ The replied message must contain an image/photo.")
+        await msg.reply_text("⚠ ɪᴍᴀɢᴇ ʀᴇQᴜɪʀᴇᴅ.")
         return
     DB["settings"]["qr_file_id"] = file_id
     DB["settings"]["upi_id"] = "faridh@fam"
     DB["settings"]["upi_name"] = "FARID"
     save_db()
-    await msg.reply_text("✅ Payment QR saved! Premium users will now see this QR.")
+    await msg.reply_text("✓ ǫʀ ꜱᴀᴠᴇᴅ.")
 
 
 async def panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_staff(update.effective_user.id):
-        await update.effective_message.reply_text("⛔ Not authorized.")
+        await update.effective_message.reply_text("⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.")
         return
     await update.effective_message.reply_text(panel_text(), reply_markup=panel_keyboard(), parse_mode="HTML")
 
@@ -1294,17 +1319,17 @@ async def panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def addcredits_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if not is_staff(uid):
-        await update.effective_message.reply_text("⛔ Not authorized.")
+        await update.effective_message.reply_text("⛔ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ.")
         return
     if len(context.args) != 2:
-        await update.effective_message.reply_text("Usage: /addcredits USER_ID AMOUNT")
+        await update.effective_message.reply_text("ᴜꜱᴀɢᴇ: /addcredits USER_ID AMOUNT")
         return
     try:
         target, amount = str(int(context.args[0])), int(context.args[1])
         if amount < 1:
             raise ValueError
     except ValueError:
-        await update.effective_message.reply_text("Invalid user ID or amount.")
+        await update.effective_message.reply_text("ɪɴᴠᴀʟɪᴅ ɪᴅ ᴏʀ ᴀᴍᴏᴜɴᴛ.")
         return
     tu = DB["users"].setdefault(
         target,
@@ -1312,38 +1337,34 @@ async def addcredits_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     tu["credits"] = tu.get("credits", 0) + amount
     save_db()
-    await update.effective_message.reply_text(f"✅ Added {amount} credits to {target}.")
+    await update.effective_message.reply_text(f"✓ +{amount} ᴄʀᴇᴅɪᴛꜱ → {target}.")
     await send_rich(
         context.bot, target,
-        "⚡ <b>𝐂𝐑𝐄𝐃𝐈𝐓𝐒 𝐀𝐃𝐃𝐄𝐃</b>\n"
-        f"   ‣ +{amount} credits\n"
-        f"   ‣ Balance: <b>{tu['credits']}</b>\n"
-        f"   {SIGN}",
+        f"❖  <b>ᴄʀᴇᴅɪᴛꜱ ᴀᴅᴅᴇᴅ</b>  ❖\n{DIV}\n  +{amount} ᴄʀᴇᴅɪᴛꜱ\n  ʙᴀʟᴀɴᴄᴇ: <b>{tu['credits']}</b>\n{DIV}\n  <i>{SIGN}</i>",
     )
 
 
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if not is_owner(uid):
-        await update.effective_message.reply_text("⛔ Owner only.")
+        await update.effective_message.reply_text("⛔ ᴏᴡɴᴇʀ ᴏɴʟʏ.")
         return
     if len(context.args) != 1:
-        await update.effective_message.reply_text("Usage: /addadmin USER_ID")
+        await update.effective_message.reply_text("ᴜꜱᴀɢᴇ: /addadmin USER_ID")
         return
     try:
         target = str(int(context.args[0]))
     except ValueError:
-        await update.effective_message.reply_text("Invalid user ID.")
+        await update.effective_message.reply_text("ɪɴᴠᴀʟɪᴅ ɪᴅ.")
         return
     if int(target) not in [int(x) for x in DB["admins"]]:
         DB["admins"].append(int(target))
         save_db()
         await send_rich(
             context.bot, target,
-            "🛡️ <b>𝐀𝐃𝐌𝐈𝐍 𝐀𝐂𝐂𝐄𝐒𝐒 𝐆𝐑𝐀𝐍𝐓𝐄𝐃</b>\n   ‣ Panel unlocked.\n"
-            f"   {SIGN}",
+            f"❖  <b>ᴀᴅᴍɪɴ ᴀᴄᴄᴇꜱꜱ ɢʀᴀɴᴛᴇᴅ</b>  ❖\n{DIV}\n  ᴘᴀɴᴇʟ ᴜɴʟᴏᴄᴋᴇᴅ.\n{DIV}\n  <i>{SIGN}</i>",
         )
-    await update.effective_message.reply_text(f"✅ {target} is now an admin.")
+    await update.effective_message.reply_text(f"✓ {target} ɴᴏᴡ ᴀᴅᴍɪɴ.")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1363,10 +1384,10 @@ async def post_init(app: Application):
     log.info("OBITO NEXUS online as @%s", me.username)
     try:
         await app.bot.set_my_commands([
-            ("start", "Open the main menu"),
-            ("help", "Show the main menu"),
-            ("single", "Check one email address"),
-            ("bulk", "Check multiple email addresses"),
+            ("start", "open the main menu"),
+            ("help", "show the main menu"),
+            ("single", "scan one email"),
+            ("bulk", "scan multiple emails"),
         ])
     except Exception:
         log.exception("Could not set bot commands")
@@ -1378,11 +1399,11 @@ def main():
 
     print("""
     ╭─────────────────────────────╮
-    │      OBITO NEXUS            │
-    │      scan core · v3         │
+    │       ᴏʙɪᴛᴏ  ɴᴇxᴜꜱ          │
+    │       scan core · v4         │
     ╰─────────────────────────────╯
-    ◈ System initialised
-    ◈ Waiting for incoming updates
+    ❖ system initialised
+    ❖ awaiting updates
     """)
 
     normal_request = HTTPXRequest(
@@ -1403,12 +1424,10 @@ def main():
     )
     app.add_error_handler(error_handler)
 
-    # Public commands
     app.add_handler(CommandHandler(["start", "help"], start))
     app.add_handler(CommandHandler("single", single_cmd))
     app.add_handler(CommandHandler("bulk", bulk_cmd))
 
-    # Hidden admin commands
     app.add_handler(CommandHandler("panel", panel_cmd))
     app.add_handler(CommandHandler("addcredits", addcredits_cmd))
     app.add_handler(CommandHandler("addadmin", admin_cmd))
