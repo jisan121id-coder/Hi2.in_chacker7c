@@ -1,6 +1,15 @@
 """
 OBITO NEXUS — Render-ready Telegram bot
-Checker engine with cloudscraper for Cloudflare bypass.
+Checker engine taken from the WORKING hi2 bot (real availability checks).
+
+Run locally:  python bot.py
+Render: Background Worker, start command `python bot.py`
+
+Required env var : BOT_TOKEN   (falls back to the working token if unset)
+Optional env vars: OWNER_USER_ID, OWNER_USERNAME, SUPPORT_CHAT, DB_FILE
+
+Public commands: /start /help /single /bulk
+Admin commands stay hidden from the public list.
 """
 import asyncio
 import html
@@ -17,7 +26,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
-import cloudscraper  # Cloudflare bypass-er jonno
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
@@ -53,14 +61,14 @@ logging.basicConfig(
 )
 log = logging.getLogger("obito")
 
-# ── BRAND / SIGNATURE ─────────────────────────────────────────
+# ── BRAND / SIGNATURE (so nobody claims it) ───────────────────
 BRAND = "𝐎𝐁𝐈𝐓𝐎 𝐍𝐄𝐗𝐔𝐒"
 SIGN = "ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴏʙɪᴛᴏ ꜰʀᴀᴍᴇᴡᴏʀᴋ 𖣂"
 MARK_STAMP = f"⟡ {BRAND} · 𝐒𝐂𝐀𝐍 𝐂𝐎𝐑𝐄 ⟡"
 
 
 # ──────────────────────────────────────────────────────────────
-# REAL AVAILABILITY CHECK ENGINE (cloudscraper added)
+# REAL AVAILABILITY CHECK ENGINE  (from the working hi2 bot)
 # ──────────────────────────────────────────────────────────────
 SUPPORTED_DOMAINS = ["hi2.in", "telegmail.com"]
 RECAPTCHA_SITEKEY = "6LfEUPkgAAAAAKTgbMoewQkWBEQhO2VPL4QviKct"
@@ -108,6 +116,7 @@ MARK = {"taken": "🔴", "not_taken": "🟢", "unknown": "🟡"}
 
 
 def _marquee(i, width=11):
+    """Ping-pong radar dot inside a track."""
     span = 2 * (width - 1)
     pos = i % span
     if pos >= width:
@@ -134,10 +143,7 @@ def short_ts():
 
 
 def build_session(seed_cookies=True):
-    # cloudscraper use kore session toiri hocche
-    s = cloudscraper.create_scraper(
-        browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
-    )
+    s = requests.Session()
     s.headers.update({
         "User-Agent": random.choice(USER_AGENTS),
         "Accept": "application/json, text/plain, */*",
@@ -193,6 +199,7 @@ def solve_recaptcha_hi2(session):
 
 
 def check_hi2_email(email):
+    """Returns 'taken' | 'not_taken' | 'unknown'."""
     if "@" not in email:
         return "unknown"
     prefix, domain = email.split("@", 1)
@@ -215,22 +222,28 @@ def check_hi2_email(email):
     data = {"domain": domain, "prefix": prefix, "recaptcha": recaptcha}
 
     try:
-        r = session.post("https://hi2.in/api/custom", headers=headers, data=data, timeout=20)
-        
-        if r.status_code == 403 and "Just a moment" in r.text:
-            log.warning("Cloudflare blocked the request.")
-            return "unknown"
-            
+        r = session.post("https://hi2.in/api/custom", headers=headers, data=data, timeout=15)
         body = r.text.lower()
-        
-        # Taken khuje ber kora
-        if "already taken" in body or "taken" in body:
-            return "taken"
-        # Free khuje ber kora
-        if "available" in body or "success" in body:
+
+        if "already taken" in body or ("taken" in body and '"error"' not in body):
+            try:
+                j = r.json()
+                if isinstance(j, dict):
+                    if j.get("error") and "taken" in str(j).lower():
+                        return "taken"
+                    if j.get("available") is False:
+                        return "taken"
+                    if j.get("available") is True:
+                        return "not_taken"
+            except Exception:
+                pass
+            if "already taken" in body:
+                return "taken"
             return "not_taken"
-            
-        return "unknown"
+
+        if "available" in body:
+            return "not_taken"
+        return "not_taken"
     except Exception as e:
         log.debug("hi2 check error: %s", e)
         return "unknown"
@@ -240,6 +253,7 @@ def check_hi2_email(email):
 # ANIMATED SCAN ROUTINES
 # ──────────────────────────────────────────────────────────────
 async def _tick(fut, seconds=1.05):
+    """Sleep in small slices while the thread future runs."""
     try:
         await asyncio.wait_for(asyncio.shield(fut), timeout=seconds)
     except asyncio.TimeoutError:
@@ -247,6 +261,7 @@ async def _tick(fut, seconds=1.05):
 
 
 async def scan_single_animated(msg, email):
+    """Animated single scan. Returns (result, elapsed_seconds, message)."""
     t0 = time.monotonic()
     fut = asyncio.ensure_future(asyncio.to_thread(check_hi2_email, email))
     target = None
@@ -277,6 +292,7 @@ async def scan_single_animated(msg, email):
 
 
 async def scan_bulk_animated(msg, emails, status_msg):
+    """Animated bulk scan with live progress bar. Returns (lines, elapsed)."""
     t0 = time.monotonic()
     total = len(emails)
     lines = []
@@ -329,6 +345,7 @@ def single_report(email, result, elapsed, uid, u):
 
 
 def bulk_report_chunks(lines, valid_count, elapsed):
+    """Splits the bulk report so huge batches never break the 4096 limit."""
     free = sum(1 for l in lines if "𝐅 𝐑 𝐄 𝐄" in l)
     taken = sum(1 for l in lines if "𝐓 𝐀 𝐊 𝐄 𝐍" in l)
     unknown = valid_count - free - taken
@@ -434,6 +451,7 @@ def trim(lst, cap):
 
 
 def log_check(uid, u, email, result, mode, save=True):
+    """Records a check for the owner's history + stats."""
     DB["stats"]["total"] = DB["stats"].get("total", 0) + 1
     DB["stats"][mode] = DB["stats"].get(mode, 0) + 1
     DB["stats"][result] = DB["stats"].get(result, 0) + 1
@@ -499,6 +517,7 @@ def who(u, uid=None):
 
 
 async def send_rich(bot, chat_id, text):
+    """Sends raw text (HTML if possible, plain otherwise)."""
     try:
         await bot.send_message(int(chat_id), text, parse_mode="HTML")
         return True
@@ -1238,7 +1257,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ──────────────────────────────────────────────────────────────
-# HIDDEN ADMIN COMMANDS
+# HIDDEN ADMIN COMMANDS (not in public list)
 # ──────────────────────────────────────────────────────────────
 async def setqr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
@@ -1367,12 +1386,12 @@ def main():
     """)
 
     normal_request = HTTPXRequest(
-        connection_pool_size=16, connect_timeout=60, read_timeout=60,
-        write_timeout=60, pool_timeout=60,
+        connection_pool_size=16, connect_timeout=30, read_timeout=40,
+        write_timeout=30, pool_timeout=30,
     )
     polling_request = HTTPXRequest(
-        connection_pool_size=4, connect_timeout=60, read_timeout=70,
-        write_timeout=60, pool_timeout=60,
+        connection_pool_size=4, connect_timeout=30, read_timeout=50,
+        write_timeout=30, pool_timeout=30,
     )
     app = (
         Application.builder()
